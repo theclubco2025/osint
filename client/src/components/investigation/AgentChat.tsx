@@ -16,13 +16,14 @@ interface AgentChatProps {
 
 export function AgentChat({ investigationId }: AgentChatProps) {
   const [input, setInput] = useState('');
+  const [streamingText, setStreamingText] = useState<string>('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
   const { data: messages = [], isLoading } = useQuery({
     queryKey: ['messages', investigationId],
     queryFn: () => getMessages(investigationId),
-    refetchInterval: 5000, // Poll every 5 seconds
+    refetchInterval: 5000, // Poll fallback every 5 seconds
   });
 
   const sendMutation = useMutation({
@@ -37,7 +38,47 @@ export function AgentChat({ investigationId }: AgentChatProps) {
     if (scrollRef.current) {
       scrollRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages, sendMutation.isPending]);
+  }, [messages, sendMutation.isPending, streamingText]);
+
+  // Realtime: subscribe to investigation events.
+  useEffect(() => {
+    if (!investigationId) return;
+
+    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws';
+    const wsUrl = `${proto}://${window.location.host}/api/ws`;
+    const ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      ws.send(JSON.stringify({ type: 'subscribe', investigationId }));
+    };
+
+    ws.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(String(event.data));
+        if (msg?.type === 'agent.chunk' && typeof msg?.payload?.chunk === 'string') {
+          setStreamingText((prev) => prev + msg.payload.chunk);
+        }
+        if (msg?.type === 'message.new') {
+          setStreamingText('');
+          queryClient.invalidateQueries({ queryKey: ['messages', investigationId] });
+        }
+      } catch {
+        // ignore
+      }
+    };
+
+    ws.onerror = () => {
+      // ignore; polling keeps UI functional
+    };
+
+    return () => {
+      try {
+        ws.close();
+      } catch {
+        // ignore
+      }
+    };
+  }, [investigationId, queryClient]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -104,6 +145,20 @@ export function AgentChat({ investigationId }: AgentChatProps) {
                    </div>
                 </div>
              </div>
+          )}
+
+          {/* Streaming State */}
+          {streamingText && (
+            <div className="flex gap-4 justify-start max-w-3xl animate-in-slide">
+              <Avatar className="h-8 w-8 border border-primary/50 bg-primary/10">
+                <AvatarFallback className="text-primary"><Bot className="h-4 w-4" /></AvatarFallback>
+              </Avatar>
+              <div className="bg-card border border-border rounded-lg p-4 text-sm mr-12">
+                <div className="markdown-body prose prose-sm dark:prose-invert max-w-none">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamingText}</ReactMarkdown>
+                </div>
+              </div>
+            </div>
           )}
           <div ref={scrollRef} />
         </div>

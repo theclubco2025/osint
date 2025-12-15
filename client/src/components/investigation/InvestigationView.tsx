@@ -1,6 +1,6 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getInvestigation, getEvidence } from '@/lib/api';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { createTask, getInvestigation, getEvidence, getEntities, getTimeline, listConnectors } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -96,28 +96,58 @@ export default function InvestigationView() {
         </TabsContent>
 
         <TabsContent value="evidence" className="flex-1 overflow-auto p-6 m-0">
-           <EvidenceBoard items={evidenceList} />
+           <EvidenceBoard investigationId={investigationId} items={evidenceList} />
         </TabsContent>
         
         <TabsContent value="graph" className="flex-1 overflow-hidden relative m-0 bg-black">
-           <GraphViewer />
+           <GraphViewer investigationId={investigationId} />
         </TabsContent>
 
         <TabsContent value="timeline" className="flex-1 overflow-auto p-6 m-0">
-           <TimelineView />
+           <TimelineView investigationId={investigationId} />
         </TabsContent>
       </Tabs>
     </div>
   );
 }
 
-function EvidenceBoard({ items }: { items: any[] }) {
+function EvidenceBoard({ investigationId, items }: { investigationId: string; items: any[] }) {
+   const queryClient = useQueryClient();
+   const { data: connectors = [] } = useQuery({
+     queryKey: ['connectors'],
+     queryFn: listConnectors,
+   });
+
+   const runTask = useMutation({
+     mutationFn: (payload: any) => createTask(investigationId, { type: 'connector', payload }),
+     onSuccess: () => {
+       queryClient.invalidateQueries({ queryKey: ['evidence', investigationId] });
+       queryClient.invalidateQueries({ queryKey: ['entities', investigationId] });
+     },
+   });
+
    if (items.length === 0) {
      return (
         <div className="flex items-center justify-center h-full">
            <div className="text-center">
               <p className="text-muted-foreground mb-2">No evidence collected yet</p>
               <p className="text-xs text-muted-foreground">Chat with the agent to start gathering intelligence</p>
+              <div className="mt-6 flex flex-wrap justify-center gap-2">
+                {connectors
+                  .filter((c: any) => ['wayback', 'web-scraper', 'github'].includes(c.name))
+                  .map((c: any) => (
+                    <Button
+                      key={c.name}
+                      variant="outline"
+                      size="sm"
+                      onClick={() => runTask.mutate({ connectorName: c.name })}
+                      disabled={runTask.isPending}
+                      className="font-mono text-xs"
+                    >
+                      Run {c.name}
+                    </Button>
+                  ))}
+              </div>
            </div>
         </div>
      );
@@ -153,7 +183,14 @@ function EvidenceBoard({ items }: { items: any[] }) {
    )
 }
 
-function GraphViewer() {
+function GraphViewer({ investigationId }: { investigationId: string }) {
+  const { data: entities = [], isLoading } = useQuery({
+    queryKey: ['entities', investigationId],
+    queryFn: () => getEntities(investigationId),
+    enabled: !!investigationId,
+    refetchInterval: 8000,
+  });
+
    return (
       <div className="w-full h-full flex items-center justify-center relative bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-gray-900 via-black to-black">
          <svg className="w-full h-full absolute inset-0 pointer-events-none">
@@ -169,30 +206,65 @@ function GraphViewer() {
             <p className="mt-2 text-xs font-mono text-primary font-bold bg-black/50 px-2 rounded">TARGET</p>
          </div>
 
-         <div className="absolute top-[30%] left-[30%] text-center">
-             <div className="w-12 h-12 rounded-full bg-card border border-border flex items-center justify-center hover:scale-110 transition-transform cursor-pointer">
-               <Hash className="h-5 w-5 text-muted-foreground" />
-             </div>
-             <p className="mt-1 text-[10px] text-muted-foreground">IP Node</p>
-         </div>
-
-         <div className="absolute top-[40%] left-[70%] text-center">
-             <div className="w-12 h-12 rounded-full bg-card border border-border flex items-center justify-center hover:scale-110 transition-transform cursor-pointer">
-               <User className="h-5 w-5 text-muted-foreground" />
-             </div>
-             <p className="mt-1 text-[10px] text-muted-foreground">Entity</p>
+         <div className="absolute top-4 left-4 right-4 z-20">
+            <div className="max-w-4xl mx-auto bg-black/60 border border-white/10 rounded-lg p-4 backdrop-blur">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <p className="text-xs font-mono text-muted-foreground uppercase">Entities</p>
+                  <p className="text-sm text-white/90">{isLoading ? 'Loading…' : `${entities.length} nodes discovered`}</p>
+                </div>
+              </div>
+              {entities.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No entities yet. Run connector tasks or add evidence to extract entities.</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-56 overflow-auto pr-2">
+                  {entities.slice(0, 50).map((e: any) => (
+                    <div key={e.id} className="flex items-center justify-between gap-3 bg-white/5 border border-white/10 rounded-md px-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-xs text-white/90 font-mono truncate">{e.value}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase">{e.entityType}</p>
+                      </div>
+                      <Badge variant="outline" className="text-[10px] border-white/20 text-white/80">{e.riskLevel}</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
          </div>
       </div>
    )
 }
 
-function TimelineView() {
+function TimelineView({ investigationId }: { investigationId: string }) {
+  const { data: events = [], isLoading } = useQuery({
+    queryKey: ['timeline', investigationId],
+    queryFn: () => getTimeline(investigationId),
+    enabled: !!investigationId,
+    refetchInterval: 8000,
+  });
+
    return (
       <div className="max-w-3xl mx-auto py-8">
-         <div className="text-center text-muted-foreground">
-            <p className="mb-2">Timeline visualization coming soon</p>
-            <p className="text-xs">Events will appear here as they're collected</p>
-         </div>
+         {isLoading ? (
+           <div className="text-center text-muted-foreground">Loading timeline…</div>
+         ) : events.length === 0 ? (
+           <div className="text-center text-muted-foreground">
+             <p className="mb-2">No timeline events yet</p>
+             <p className="text-xs">Events will appear here as they're collected</p>
+           </div>
+         ) : (
+           <div className="space-y-3">
+             {events.map((ev: any) => (
+               <Card key={ev.id} className="bg-card/50">
+                 <CardHeader className="pb-2">
+                   <CardTitle className="text-base">{ev.title}</CardTitle>
+                   <p className="text-xs font-mono text-muted-foreground">{new Date(ev.eventDate).toLocaleString()}</p>
+                 </CardHeader>
+                 <CardContent className="text-sm text-muted-foreground">{ev.description}</CardContent>
+               </Card>
+             ))}
+           </div>
+         )}
       </div>
    )
 }
