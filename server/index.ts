@@ -1,7 +1,10 @@
 import express, { type Request, Response, NextFunction } from "express";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { setupWebsocket } from "./realtime/ws";
 
 const app = express();
 const httpServer = createServer(app);
@@ -14,6 +17,7 @@ declare module "http" {
 
 app.use(
   express.json({
+    limit: process.env.JSON_BODY_LIMIT ?? "1mb",
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
@@ -21,6 +25,28 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// Basic hardening: hide stack, headers, and apply sane defaults.
+app.disable("x-powered-by");
+app.set("trust proxy", 1);
+app.use(
+  helmet({
+    // Our SPA is same-origin; keep defaults mostly intact.
+    // If you later add external resources, update CSP accordingly.
+    contentSecurityPolicy: process.env.NODE_ENV === "production" ? undefined : false,
+  }),
+);
+
+// Global API rate limit (tighten in production as needed).
+app.use(
+  "/api",
+  rateLimit({
+    windowMs: 60_000,
+    limit: Number.parseInt(process.env.API_RATE_LIMIT_PER_MINUTE ?? "240", 10),
+    standardHeaders: "draft-7",
+    legacyHeaders: false,
+  }),
+);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -61,13 +87,17 @@ app.use((req, res, next) => {
 
 (async () => {
   await registerRoutes(httpServer, app);
+  setupWebsocket(httpServer);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
 
-    res.status(status).json({ message });
-    throw err;
+    // Never throw after responding; it can crash the process.
+    if (!res.headersSent) {
+      res.status(status).json({ message });
+    }
+    log(`Unhandled error: ${message}`, "error");
   });
 
   // importantly only setup vite in development and after

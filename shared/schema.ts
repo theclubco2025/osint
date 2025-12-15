@@ -103,3 +103,50 @@ export const insertTimelineEventSchema = createInsertSchema(timelineEvents).omit
 
 export type TimelineEvent = typeof timelineEvents.$inferSelect;
 export type InsertTimelineEvent = z.infer<typeof insertTimelineEventSchema>;
+
+// Investigation Tasks (job queue backing store)
+export const investigationTasks = pgTable("investigation_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  investigationId: varchar("investigation_id")
+    .notNull()
+    .references(() => investigations.id, { onDelete: "cascade" }),
+  type: text("type").notNull(), // 'connector', 'analysis', 'report', 'custom'
+  phase: text("phase").notNull(), // 'Phase 1: Enrichment', ...
+  status: text("status").notNull().default("queued"), // 'queued' | 'running' | 'completed' | 'failed'
+  payload: jsonb("payload").default(sql`'{}'::jsonb`),
+  result: jsonb("result").default(sql`'{}'::jsonb`),
+  error: text("error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  startedAt: timestamp("started_at"),
+  completedAt: timestamp("completed_at"),
+});
+
+export const insertInvestigationTaskSchema = createInsertSchema(investigationTasks).omit({
+  id: true,
+  createdAt: true,
+  startedAt: true,
+  completedAt: true,
+});
+
+export type InvestigationTask = typeof investigationTasks.$inferSelect;
+export type InsertInvestigationTask = z.infer<typeof insertInvestigationTaskSchema>;
+
+// Audit Logs (security + compliance trail)
+export const auditLogs = pgTable("audit_logs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  investigationId: varchar("investigation_id").references(() => investigations.id, { onDelete: "set null" }),
+  action: text("action").notNull(), // e.g. 'investigation.create', 'agent.message', 'evidence.add'
+  actor: text("actor").notNull().default("system"), // 'system' | user id/identifier
+  ip: text("ip"),
+  userAgent: text("user_agent"),
+  metadata: jsonb("metadata").default(sql`'{}'::jsonb`),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export const insertAuditLogSchema = createInsertSchema(auditLogs).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type AuditLog = typeof auditLogs.$inferSelect;
+export type InsertAuditLog = z.infer<typeof insertAuditLogSchema>;

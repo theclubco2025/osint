@@ -5,6 +5,8 @@ import {
   evidence, 
   entities,
   timelineEvents,
+  investigationTasks,
+  auditLogs,
   type Investigation, 
   type InsertInvestigation,
   type Message,
@@ -15,6 +17,10 @@ import {
   type InsertEntity,
   type TimelineEvent,
   type InsertTimelineEvent,
+  type InvestigationTask,
+  type InsertInvestigationTask,
+  type AuditLog,
+  type InsertAuditLog,
 } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 
@@ -40,6 +46,16 @@ export interface IStorage {
   // Timeline
   createTimelineEvent(data: InsertTimelineEvent): Promise<TimelineEvent>;
   getTimelineByInvestigation(investigationId: string): Promise<TimelineEvent[]>;
+
+  // Tasks
+  createTask(data: InsertInvestigationTask): Promise<InvestigationTask>;
+  getTask(id: string): Promise<InvestigationTask | undefined>;
+  listTasksByInvestigation(investigationId: string): Promise<InvestigationTask[]>;
+  updateTask(id: string, data: Partial<InsertInvestigationTask> & { status?: string; error?: string | null; result?: any; startedAt?: Date | null; completedAt?: Date | null }): Promise<InvestigationTask | undefined>;
+
+  // Audit
+  createAuditLog(data: InsertAuditLog): Promise<AuditLog>;
+  listAuditLogs(opts?: { investigationId?: string; limit?: number; offset?: number }): Promise<AuditLog[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -101,6 +117,62 @@ export class DatabaseStorage implements IStorage {
 
   async getTimelineByInvestigation(investigationId: string): Promise<TimelineEvent[]> {
     return db.select().from(timelineEvents).where(eq(timelineEvents.investigationId, investigationId)).orderBy(timelineEvents.eventDate);
+  }
+
+  // Tasks
+  async createTask(data: InsertInvestigationTask): Promise<InvestigationTask> {
+    const [task] = await db.insert(investigationTasks).values(data).returning();
+    return task;
+  }
+
+  async getTask(id: string): Promise<InvestigationTask | undefined> {
+    const [task] = await db.select().from(investigationTasks).where(eq(investigationTasks.id, id));
+    return task;
+  }
+
+  async listTasksByInvestigation(investigationId: string): Promise<InvestigationTask[]> {
+    return db
+      .select()
+      .from(investigationTasks)
+      .where(eq(investigationTasks.investigationId, investigationId))
+      .orderBy(desc(investigationTasks.createdAt));
+  }
+
+  async updateTask(
+    id: string,
+    data: Partial<InsertInvestigationTask> & {
+      status?: string;
+      error?: string | null;
+      result?: any;
+      startedAt?: Date | null;
+      completedAt?: Date | null;
+    },
+  ): Promise<InvestigationTask | undefined> {
+    const [updated] = await db.update(investigationTasks).set(data as any).where(eq(investigationTasks.id, id)).returning();
+    return updated;
+  }
+
+  // Audit
+  async createAuditLog(data: InsertAuditLog): Promise<AuditLog> {
+    const [log] = await db.insert(auditLogs).values(data).returning();
+    return log;
+  }
+
+  async listAuditLogs(opts?: { investigationId?: string; limit?: number; offset?: number }): Promise<AuditLog[]> {
+    const limit = opts?.limit ?? 200;
+    const offset = opts?.offset ?? 0;
+
+    if (opts?.investigationId) {
+      return db
+        .select()
+        .from(auditLogs)
+        .where(eq(auditLogs.investigationId, opts.investigationId))
+        .orderBy(desc(auditLogs.createdAt))
+        .limit(limit)
+        .offset(offset);
+    }
+
+    return db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(limit).offset(offset);
   }
 }
 
