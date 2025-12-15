@@ -1,0 +1,229 @@
+You are Replit’s Lead AI Engineer. Build me a complete, production-grade, self-hostable OSINT Intelligence Platform WITH a built-in AI Agent that uses the **Kimi K2 LLM API**. Your job is NOT to describe the system — you must GENERATE the full codebase, all directories, all files, all modules, and all configuration automatically.
+
+This must be delivered as a fully runnable project with both backend and frontend implemented.
+
+===================================================================
+                    CORE OBJECTIVE — FULL OSINT PLATFORM
+===================================================================
+Build a complete OSINT intelligence application with:
+
+1. **Backend:** Python + FastAPI  
+2. **LLM Agent:** Using the Kimi K2 API as the ONLY provider  
+3. **Job Queue:** Celery + Redis  
+4. **Database:** PostgreSQL + Alembic migrations  
+5. **Advanced Web Scraper:** Playwright with proxy rotation  
+6. **Modular Connector System:** Plugin-based architecture  
+7. **Entity Recognition + Graph Builder**  
+8. **Timeline Builder + Risk Scoring Engine**  
+9. **Reporting Engine:** JSON, HTML, PDF  
+10. **Frontend:** React + TailwindCSS  
+11. **Agent Chat Interface:** A Manus-style conversational UI  
+12. **Evidence Explorer + Graph Viewer + Timeline Viewer**  
+13. **Audit Logging + Evidence Hashing + Secure Storage**
+
+The platform must support **conversational, agent-driven OSINT operations** where the LLM can ask follow-up questions, schedule new tasks, analyze evidence, and provide investigative direction.
+
+===================================================================
+                        ✦ MUST USE KIMI K2 ✦
+===================================================================
+LLM Integration Requirements:
+
+- Use the **Kimi K2 API** exclusively for all agent reasoning, summarization, analysis, and follow-up tasks.
+- Implement an `/agent/message` endpoint.
+- Include a complete Python module for interacting with the Kimi API.
+- Store chat history in PostgreSQL.
+- Agent must:
+  - Read investigation data
+  - Create new Celery tasks
+  - Ask clarifying questions
+  - Suggest next steps
+  - Build narrative findings
+  - Perform deep OSINT synthesis
+
+===================================================================
+                       BACKEND REQUIREMENTS
+===================================================================
+
+Use FastAPI with the following endpoints:
+
+### Investigations
+- POST /investigations
+- GET /investigations/{id}
+- POST /investigations/{id}/tasks
+- GET /investigations/{id}/report
+
+### Agent (LLM)
+- POST /agent/message → Handles full chat interaction with Kimi
+
+### Audit
+- GET /audit-log
+
+### System
+- GET /health
+
+Implement WebSocket support for:
+- real-time job updates
+- agent streamed responses
+
+===================================================================
+                         CONNECTOR SYSTEM
+===================================================================
+
+Create `/backend/connectors/` and implement a **plugin architecture**.
+
+Each connector must include:
+- Supported input types  
+- Validation logic  
+- Standard output schema (JSON evidence object)  
+- Raw evidence storage  
+- Audit logging  
+
+### Required Connectors:
+1. GitHub (public API)
+2. Shodan
+3. IPinfo
+4. HaveIBeenPwned
+5. Wayback Machine
+6. Search Engine (SerpAPI)
+7. Pastebin (public)
+8. Telegram (PUBLIC channels only)
+9. **Web Scraper (Playwright)** with:
+   - headless browser
+   - JS-rendering
+   - screenshot capture
+   - HTML archiving
+   - Proxy rotation
+   - User-agent rotation
+   - robots.txt compliance
+
+===================================================================
+                         JOB SYSTEM (CELERY)
+===================================================================
+
+Implement 4 investigation phases:
+
+PHASE 1 — Initial Enrichment  
+PHASE 2 — Deep Collection  
+PHASE 3 — Entity Extraction + Timeline + Graph  
+PHASE 4 — Risk Scoring + Report Builder  
+
+Each phase must be extendable and modular.
+
+===================================================================
+                    ANALYSIS & INTELLIGENCE ENGINE
+===================================================================
+
+### Entity Extraction
+- spaCy or similar  
+- Extract: names, orgs, locations, emails, domains  
+
+### Graph Builder
+- Create nodes + edges for all relationships  
+- Store graph in database  
+
+### Timeline Builder
+- Extract timestamps  
+- Build chronologically ordered event objects  
+
+### Risk Engine
+- Configurable scoring rules  
+- Evaluate:
+  - Breach exposure
+  - Malicious associations
+  - Infrastructure risk
+  - OSINT red flags  
+
+===================================================================
+                          FRONTEND (React)
+===================================================================
+
+Build a complete frontend using React + TailwindCSS.
+
+### Required Pages:
+- Dashboard
+- New Investigation
+- Investigation Overview
+- Agent Chat UI (like Manus)
+- Evidence Explorer
+- Timeline Viewer
+- Entity Graph Viewer (D3.js or Vis.js)
+- Report Viewer
+
+### Required Components:
+- WebSocket event stream
+- Expandable evidence cards
+- Interactive graph canvas
+- Zoomable timeline
+- PDF/JSON/HTML export buttons
+- Investigation list + filters
+
+===================================================================
+                    PROJECT STRUCTURE (MUST FOLLOW)
+===================================================================
+
+Generate this EXACT structure:
+
+/backend
+    main.py
+    /api
+    /agent
+    /analysis
+    /connectors
+    /database
+    /models
+    /tasks
+    /utils
+    /evidence_store
+
+/frontend
+    /src
+        /components
+        /pages
+        /hooks
+        /state
+    index.jsx
+
+/config
+/tests
+README.md
+.env.example
+
+===================================================================
+             SECURITY REQUIREMENTS (NO EXCEPTIONS)
+===================================================================
+
+- Respect robots.txt  
+- NEVER bypass logins  
+- NEVER access private data  
+- Secure API keys with Replit Secrets  
+- Input validation on all endpoints  
+- Mask API keys in logs  
+- Evidence hashing for integrity  
+- Sanitize HTML snapshots  
+
+===================================================================
+               GENERATION INSTRUCTIONS — DO ALL
+===================================================================
+
+You MUST:
+
+1. Generate the FULL directory structure.  
+2. Generate ALL backend Python files.  
+3. Generate ALL frontend React files.  
+4. Implement all connectors fully.  
+5. Implement Playwright scraper fully.  
+6. Implement Celery + Redis config.  
+7. Implement PostgreSQL models + Alembic migrations.  
+8. Implement the Kimi K2 LLM agent logic.  
+9. Implement real-time WebSockets.  
+10. Implement the timeline/graph/risk engines.  
+11. Implement evidence storage + logging.  
+12. Implement report exporters.  
+13. Generate a full README.md explaining everything.  
+14. Generate a complete `.env.example` with all required keys.  
+
+Do NOT describe.  
+Do NOT outline.  
+Do NOT summarize.  
+
+Generate the FULL WORKING APPLICATION NOW.
