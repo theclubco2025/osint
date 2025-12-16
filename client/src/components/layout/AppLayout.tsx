@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useLocation, Link } from 'wouter';
 import { 
   ShieldAlert, 
@@ -21,7 +21,9 @@ import { getInvestigation } from '@/lib/api';
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const [location] = useLocation();
+  const [, setLocation] = useLocation();
   const { activeInvestigationId } = useApp();
+  const [search, setSearch] = useState('');
   
   // Fetch the active investigation from API if one is selected
   const { data: activeInv } = useQuery({
@@ -54,8 +56,8 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           <ShieldAlert className="h-5 w-5 text-primary" />
         </div>
         <div>
-          <h1 className="font-display font-bold text-lg tracking-tight text-foreground">KIMI <span className="text-primary">OSINT</span></h1>
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono">v2.4.0-SECURE</p>
+          <h1 className="font-display font-bold text-lg tracking-tight text-foreground">Dpt of <span className="text-primary">Karma</span> OSINT</h1>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-mono">portable • secure • v0.1</p>
         </div>
       </div>
 
@@ -78,7 +80,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                 <p className="font-medium text-sm truncate text-foreground mb-1">{activeInv.title}</p>
                 <div className="flex items-center justify-between text-[10px] text-muted-foreground">
                   <span>{activeInv.phase.split(':')[0]}</span>
-                  <span>{activeInv.riskScore}% Risk</span>
+                  <span>{activeInv.confidence ?? 0}% Confidence</span>
                 </div>
              </div>
              <div className="mt-2 space-y-1">
@@ -128,7 +130,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                 </span>
-               Kimi K2 Agent Online
+               Kimi Agent Online
              </span>
              <span className="text-border mx-2">|</span>
              <span className="font-mono text-xs">SYS_STATUS: OPTIMAL</span>
@@ -140,6 +142,15 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
                   type="text" 
                   placeholder="Search intelligence database..." 
                   className="h-9 w-64 bg-muted/30 border border-input rounded-md pl-9 pr-4 text-sm focus:outline-none focus:ring-1 focus:ring-primary/50 placeholder:text-muted-foreground/50 font-mono"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      const q = search.trim();
+                      if (q) setLocation(`/search?q=${encodeURIComponent(q)}`);
+                    }
+                  }}
                 />
              </div>
           </div>

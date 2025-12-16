@@ -1,17 +1,18 @@
 import React from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { getInvestigation, getEvidence } from '@/lib/api';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { getInvestigation, getEvidence, runInvestigation, exportCaseFile, updateInvestigation, deleteInvestigation, addProvidedFact } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useRoute, Link } from 'wouter';
 import { AgentChat } from './AgentChat';
-import { FileText, Globe, Image, Share2, Calendar, Hash, Lock, MoreHorizontal, User, ShieldAlert, Loader2 } from 'lucide-react';
+import { FileText, Globe, Image, Share2, Calendar, Hash, Lock, MoreHorizontal, User, ShieldAlert, Loader2, Play, Download, AlertTriangle, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function InvestigationView() {
   const [, params] = useRoute('/investigation/:id');
   const investigationId = params?.id || '';
+  const queryClient = useQueryClient();
 
   const { data: investigation, isLoading } = useQuery({
     queryKey: ['investigation', investigationId],
@@ -23,6 +24,70 @@ export default function InvestigationView() {
     queryKey: ['evidence', investigationId],
     queryFn: () => getEvidence(investigationId),
     enabled: !!investigationId,
+  });
+
+  const runMutation = useMutation({
+    mutationFn: () => runInvestigation(investigationId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investigation', investigationId] });
+      queryClient.invalidateQueries({ queryKey: ['evidence', investigationId] });
+      queryClient.invalidateQueries({ queryKey: ['messages', investigationId] });
+    },
+  });
+
+  const exportMutation = useMutation({
+    mutationFn: async () => {
+      const blob = await exportCaseFile(investigationId);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `karma_case_${investigationId.slice(0, 8)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investigation', investigationId] });
+      queryClient.invalidateQueries({ queryKey: ['investigations'] });
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: (status: string) => updateInvestigation(investigationId, { status }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['investigation', investigationId] });
+      queryClient.invalidateQueries({ queryKey: ['investigations'] });
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async () => {
+      if (!confirm('Delete this investigation? This cannot be undone.')) return { ok: false };
+      return deleteInvestigation(investigationId);
+    },
+    onSuccess: (r) => {
+      if ((r as any)?.ok) {
+        queryClient.invalidateQueries({ queryKey: ['investigations'] });
+        // go back to dashboard
+        window.location.href = '/';
+      }
+    },
+  });
+
+  const addFactMutation = useMutation({
+    mutationFn: async () => {
+      const relation = prompt('Relationship type (e.g., mother, father):', 'mother')?.trim();
+      if (!relation) return null;
+      const name = prompt(`Name for ${relation}:`)?.trim();
+      if (!name) return null;
+      const authorized = confirm('Mark this fact as authorized/verified by the investigator?');
+      return addProvidedFact(investigationId, { relation, name, authorized });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['evidence', investigationId] });
+      queryClient.invalidateQueries({ queryKey: ['messages', investigationId] });
+    },
   });
 
   if (isLoading) {
@@ -58,16 +123,77 @@ export default function InvestigationView() {
          </div>
          <div className="flex items-center gap-3">
             <div className="text-right mr-4">
-               <div className="text-xs text-muted-foreground uppercase tracking-wider">Risk Score</div>
-               <div className="font-mono text-xl font-bold text-destructive">{investigation.riskScore}/100</div>
+               <div className="text-xs text-muted-foreground uppercase tracking-wider">Confidence</div>
+               <div className="font-mono text-xl font-bold text-primary">{investigation.confidence ?? 0}%</div>
             </div>
+            <Button
+              size="sm"
+              className="gap-2"
+              variant="secondary"
+              disabled={runMutation.isPending}
+              onClick={() => runMutation.mutate()}
+              title="Collect safe public OSINT (DNS/RDAP/CT/GitHub public)"
+            >
+              {runMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4" />}
+              Run Investigation
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              disabled={addFactMutation.isPending}
+              onClick={() => addFactMutation.mutate()}
+              title="Add an investigator-provided fact (stored as evidence)"
+            >
+              {addFactMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Hash className="h-4 w-4" />}
+              Add Fact
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              disabled={exportMutation.isPending}
+              onClick={() => exportMutation.mutate()}
+              title="Download a portable case file (messages, evidence, entities, timeline). This will archive the case."
+            >
+              {exportMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+              Export Case File
+            </Button>
+            <Button
+              size="sm"
+              variant={investigation.status === 'critical' ? 'destructive' : 'outline'}
+              className="gap-2"
+              disabled={statusMutation.isPending}
+              onClick={() => statusMutation.mutate(investigation.status === 'critical' ? 'active' : 'critical')}
+              title="Toggle critical status"
+            >
+              {statusMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <AlertTriangle className="h-4 w-4" />}
+              {investigation.status === 'critical' ? 'Critical' : 'Mark Critical'}
+            </Button>
             <Link href={`/investigation/${investigation.id}/report`}>
                <Button variant="outline" size="sm" className="gap-2">
                   <Share2 className="h-4 w-4" /> Export Report
                </Button>
             </Link>
-            <Button size="sm" className="gap-2 bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+            <Button
+              size="sm"
+              className="gap-2 bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+              disabled={statusMutation.isPending}
+              onClick={() => statusMutation.mutate('archived')}
+              title="Archive this case"
+            >
                <Lock className="h-4 w-4" /> Close Case
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2"
+              disabled={deleteMutation.isPending}
+              onClick={() => deleteMutation.mutate()}
+              title="Delete this case"
+            >
+              {deleteMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              Delete
             </Button>
          </div>
       </div>

@@ -133,7 +133,7 @@ export function AgentChat({ investigationId }: AgentChatProps) {
              </Button>
           </form>
           <div className="text-[10px] text-center mt-2 text-muted-foreground font-mono">
-            Kimi K2 Agent • OSINT Module v2.1 • Secure Channel
+            Kimi Agent • Dpt of Karma OSINT • Secure Channel
           </div>
         </div>
       </div>

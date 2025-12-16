@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { listInvestigations } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -13,9 +13,16 @@ export default function Dashboard() {
     queryKey: ['investigations'],
     queryFn: listInvestigations,
   });
+  const [filter, setFilter] = useState<'all' | 'active' | 'critical' | 'archived'>('all');
 
   const activeInvestigations = investigations.filter(i => i.status === 'active');
   const criticalInvestigations = investigations.filter(i => i.status === 'critical');
+  const archivedInvestigations = investigations.filter(i => i.status === 'archived');
+
+  const visible = useMemo(() => {
+    if (filter === 'all') return investigations;
+    return investigations.filter(i => i.status === filter);
+  }, [investigations, filter]);
 
   return (
     <div className="space-y-6 animate-in-slide">
@@ -73,7 +80,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold font-mono text-green-500">ONLINE</div>
-            <p className="text-xs text-muted-foreground mt-1">Kimi K2 operational</p>
+            <p className="text-xs text-muted-foreground mt-1">Kimi operational</p>
           </CardContent>
         </Card>
       </div>
@@ -85,9 +92,15 @@ export default function Dashboard() {
           <CardDescription>Latest intelligence gathering operations</CardDescription>
         </CardHeader>
         <CardContent>
+          <div className="flex flex-wrap gap-2 mb-4">
+            <Button size="sm" variant={filter === 'all' ? 'default' : 'outline'} onClick={() => setFilter('all')}>All</Button>
+            <Button size="sm" variant={filter === 'active' ? 'default' : 'outline'} onClick={() => setFilter('active')}>Active</Button>
+            <Button size="sm" variant={filter === 'critical' ? 'destructive' : 'outline'} onClick={() => setFilter('critical')}>Critical</Button>
+            <Button size="sm" variant={filter === 'archived' ? 'secondary' : 'outline'} onClick={() => setFilter('archived')}>Archived</Button>
+          </div>
           {isLoading ? (
             <div className="text-center py-8 text-muted-foreground">Loading investigations...</div>
-          ) : investigations.length === 0 ? (
+          ) : visible.length === 0 ? (
             <div className="text-center py-8">
               <p className="text-muted-foreground mb-4">No investigations yet</p>
               <Link href="/new">
@@ -96,7 +109,7 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="space-y-4">
-              {investigations.map((inv) => (
+              {visible.map((inv) => (
                 <div 
                   key={inv.id} 
                   className="flex items-center justify-between p-4 bg-card border border-border rounded-lg hover:border-primary/50 transition-colors group"
@@ -117,8 +130,8 @@ export default function Dashboard() {
                   </div>
                   <div className="flex items-center gap-6">
                     <div className="text-right hidden sm:block">
-                      <div className="text-sm font-mono font-bold text-foreground">{inv.riskScore}/100</div>
-                      <div className="text-[10px] text-muted-foreground uppercase">Risk Score</div>
+                      <div className="text-sm font-mono font-bold text-foreground">{inv.confidence ?? 0}%</div>
+                      <div className="text-[10px] text-muted-foreground uppercase">Confidence</div>
                     </div>
                     <Link href={`/investigation/${inv.id}`}>
                       <Button size="icon" variant="ghost" className="opacity-0 group-hover:opacity-100 transition-opacity">

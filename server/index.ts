@@ -1,7 +1,9 @@
+import "dotenv/config";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import { simpleRateLimit } from "./lib/limits";
 
 const app = express();
 const httpServer = createServer(app);
@@ -21,6 +23,9 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// Basic request limiting for safety (especially OSINT collection endpoints)
+app.use(simpleRateLimit({ windowMs: 60_000, max: 180 }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
@@ -85,14 +90,14 @@ app.use((req, res, next) => {
   // this serves both the API and the client.
   // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || "5000", 10);
-  httpServer.listen(
-    {
-      port,
-      host: "0.0.0.0",
-      reusePort: true,
-    },
-    () => {
-      log(`serving on port ${port}`);
-    },
-  );
+
+  // `reusePort` is not supported on Windows in many Node builds and can throw ENOTSUP.
+  const listenOptions: any = { port, host: "0.0.0.0" };
+  if (process.platform !== "win32") {
+    listenOptions.reusePort = true;
+  }
+
+  httpServer.listen(listenOptions, () => {
+    log(`serving on port ${port}`);
+  });
 })();

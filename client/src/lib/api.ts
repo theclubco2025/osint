@@ -7,7 +7,7 @@ export interface Investigation {
   targetType: string;
   status: string;
   phase: string;
-  riskScore: number;
+  confidence: number;
   totalTasks: number;
   completedTasks: number;
   metadata: any;
@@ -55,7 +55,6 @@ export async function createInvestigation(data: {
   targetType: string;
   status?: string;
   phase?: string;
-  riskScore?: number;
 }): Promise<Investigation> {
   const res = await fetch('/api/investigations', {
     method: 'POST',
@@ -80,6 +79,76 @@ export async function sendMessage(investigationId: string, message: string): Pro
     body: JSON.stringify({ message }),
   });
   if (!res.ok) throw new Error('Failed to send message');
+  return res.json();
+}
+
+export async function runInvestigation(investigationId: string): Promise<{ ok: boolean; evidenceAdded: number; entitiesAdded: number; confidence: number }> {
+  const res = await fetch(`/api/investigations/${investigationId}/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  if (!res.ok) throw new Error('Failed to run investigation');
+  return res.json();
+}
+
+export async function exportCaseFile(investigationId: string): Promise<Blob> {
+  const res = await fetch(`/api/investigations/${investigationId}/export`);
+  if (!res.ok) throw new Error('Failed to export case file');
+  return res.blob();
+}
+
+export async function deleteInvestigation(id: string): Promise<{ ok: boolean }> {
+  const res = await fetch(`/api/investigations/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error('Failed to delete investigation');
+  return res.json();
+}
+
+export async function updateInvestigation(id: string, patch: { status?: string; title?: string; phase?: string; metadata?: any }): Promise<Investigation> {
+  const res = await fetch(`/api/investigations/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error('Failed to update investigation');
+  return res.json();
+}
+
+export interface AuditEvent {
+  id: string;
+  ts: string;
+  action: string;
+  investigationId?: string;
+  summary: string;
+  details?: any;
+}
+
+export async function getAuditLog(): Promise<AuditEvent[]> {
+  const res = await fetch('/api/audit-log');
+  if (!res.ok) throw new Error('Failed to fetch audit log');
+  return res.json();
+}
+
+export interface SearchResult {
+  kind: 'investigation' | 'message' | 'evidence' | 'entity' | 'timeline';
+  investigationId: string;
+  id: string;
+  title: string;
+  snippet?: string;
+}
+
+export async function searchIntelligence(q: string): Promise<SearchResult[]> {
+  const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+  if (!res.ok) throw new Error('Failed to search');
+  return res.json();
+}
+
+export async function addProvidedFact(investigationId: string, fact: { relation: string; name: string; authorized?: boolean }) {
+  const res = await fetch(`/api/investigations/${investigationId}/facts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fact),
+  });
+  if (!res.ok) throw new Error('Failed to add provided fact');
   return res.json();
 }
 

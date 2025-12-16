@@ -8,10 +8,12 @@ export const investigations = pgTable("investigations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   title: text("title").notNull(),
   target: text("target").notNull(),
-  targetType: text("target_type").notNull(), // 'domain', 'email', 'username'
+  // Primary target classification. In portable mode we also use "case" for freeform descriptions.
+  targetType: text("target_type").notNull().default("case"),
   status: text("status").notNull().default('active'), // 'active', 'archived', 'critical'
   phase: text("phase").notNull().default('Phase 1: Enrichment'),
-  riskScore: integer("risk_score").notNull().default(0),
+  // Confidence score (0-100). Primary measure for reliability in this portable workflow.
+  confidence: integer("confidence").notNull().default(0),
   totalTasks: integer("total_tasks").notNull().default(0),
   completedTasks: integer("completed_tasks").notNull().default(0),
   metadata: jsonb("metadata").default(sql`'{}'::jsonb`), // Additional flexible data

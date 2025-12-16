@@ -1,0 +1,11 @@
+node_modules
+.env
+
+# Build output
+dist
+
+# Local/portable datastore (can contain sensitive investigation data)
+data/*.json
+
+# Cursor/IDE metadata
+.cursor

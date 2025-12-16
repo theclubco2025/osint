@@ -39,13 +39,13 @@ export class KimiClient {
   private baseUrl: string = 'https://api.moonshot.cn/v1';
 
   constructor(apiKey: string) {
-    if (!apiKey) {
-      throw new Error('Kimi API key is required');
-    }
     this.apiKey = apiKey;
   }
 
   async chat(messages: KimiMessage[], options?: { temperature?: number; maxTokens?: number }): Promise<string> {
+    if (!this.apiKey) {
+      throw new Error('Kimi API key is required (set KIMI_API_KEY)');
+    }
     const request: KimiChatRequest = {
       model: 'moonshot-v1-8k', // Using the 8k context model
       messages,
@@ -89,24 +89,36 @@ export class KimiClient {
       target: string;
       targetType: string;
       phase: string;
-      riskScore: number;
+      confidence: number;
       existingEvidence?: string[];
     }
   ): Promise<string> {
-    const systemPrompt = `You are Kimi K2, an advanced OSINT (Open Source Intelligence) AI agent. Your role is to assist investigators in gathering, analyzing, and synthesizing intelligence from public sources.
+    const systemPrompt = `You are Kimi K2, an OSINT (Open Source Intelligence) assistant for authorized investigations. Your role is to help investigators gather, analyze, and synthesize intelligence from **lawful, public, verifiable sources**.
 
 **Your Capabilities:**
-- Analyze targets (domains, emails, usernames, IP addresses)
-- Suggest investigation strategies and next steps
+- Analyze targets (domains, emails, usernames, IP addresses, names, phone numbers, addresses)
+- Suggest investigation strategies and next steps (query expansion, pivoting, corroboration)
 - Interpret evidence and identify patterns
 - Assess risk levels and threat indicators
-- Recommend specific OSINT tools and connectors
+- Recommend specific OSINT tools and connectors (official APIs preferred)
+
+**Hard Rules (must follow):**
+- Do **not** provide instructions to bypass access controls, scrape behind logins, purchase/traffic in illegal data, or access dark-web markets.
+- Do **not** guess or fabricate “returns.” If evidence is missing, say what is missing and give the next best verifiable steps.
+- Treat social-media leads as **public-only**: use official APIs or public URLs surfaced by web search; never attempt private access.
+- For criminal history/background: only suggest **official court/public records portals** or licensed providers the investigator is authorized to use; do not “hack around” it.
+
+**SOP (follow every time):**
+- Restate the target + any known identifiers; list gaps that would unlock better matches (DOB, city/state, known handles, known employer, known domains).
+- Generate a small set of high-yield pivots (3–8) with exact queries (quotes, site filters) and what each pivot is trying to confirm.
+- When you cite a claim, tie it to a source type (web result, RDAP, CT, Wikidata, etc.) and ask for corroboration if weak.
+- Provide an “Actionable Leads” section: ranked leads, why they matter, and what to do next for each lead.
 
 **Current Investigation Context:**
 - Target: ${context.target}
 - Target Type: ${context.targetType}
 - Current Phase: ${context.phase}
-- Risk Score: ${context.riskScore}/100
+- Confidence: ${context.confidence}/100
 ${context.existingEvidence && context.existingEvidence.length > 0 ? `\n**Existing Evidence:**\n${context.existingEvidence.map((e, i) => `${i + 1}. ${e}`).join('\n')}` : ''}
 
 **Guidelines:**

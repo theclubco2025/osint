@@ -7,6 +7,9 @@ import Dashboard from '@/pages/Dashboard';
 import NewInvestigation from '@/pages/NewInvestigation';
 import InvestigationView from '@/components/investigation/InvestigationView';
 import ReportView from '@/pages/ReportView';
+import Audit from '@/pages/Audit';
+import Settings from '@/pages/Settings';
+import SearchPage from '@/pages/Search';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,8 +28,11 @@ function App() {
           <Switch>
             <Route path="/" component={Dashboard} />
             <Route path="/new" component={NewInvestigation} />
+            <Route path="/search" component={SearchPage} />
             <Route path="/investigation/:id" component={InvestigationView} />
             <Route path="/investigation/:id/report" component={ReportView} />
+            <Route path="/audit" component={Audit} />
+            <Route path="/settings" component={Settings} />
             <Route>
               <div className="flex items-center justify-center h-full">
                 <div className="text-center">

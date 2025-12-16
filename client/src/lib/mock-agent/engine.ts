@@ -1,7 +1,7 @@
 export const MOCK_AGENT_RESPONSES = [
   {
     trigger: 'analyze',
-    steps: ['Accessing Kimi K2 Knowledge Base...', 'Cross-referencing OSINT databases...', 'Synthesizing findings...'],
+    steps: ['Accessing knowledge base...', 'Cross-referencing OSINT databases...', 'Synthesizing findings...'],
     response: `**Analysis Complete.**
 
 I have analyzed the target domain **crypto-nexus-ring.com**. Here are the key findings:
