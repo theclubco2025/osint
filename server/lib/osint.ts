@@ -149,6 +149,46 @@ async function fetchText(url: string, opts?: { timeoutMs?: number; headers?: Rec
   }
 }
 
+async function safeFetchMaybeText(url: string, opts?: { timeoutMs?: number; headers?: Record<string, string> }) {
+  try {
+    const text = await fetchText(url, opts);
+    return { ok: true as const, url, text };
+  } catch (e: any) {
+    return { ok: false as const, url, error: String(e?.message ?? e) };
+  }
+}
+
+function buildWebQueriesForTarget(ttype: TargetType, target: string) {
+  const q: string[] = [];
+  if (ttype === "name") {
+    q.push(`"${target}"`);
+    q.push(`"${target}" profile`);
+    q.push(`"${target}" linkedin`);
+  } else if (ttype === "username") {
+    q.push(`"${target}"`);
+    // High-yield platform pivots (public pages only)
+    q.push(`site:instagram.com "${target}"`);
+    q.push(`site:facebook.com "${target}"`);
+    q.push(`site:github.com "${target}"`);
+    q.push(`site:gitlab.com "${target}"`);
+    q.push(`site:linkedin.com/in "${target}"`);
+  } else if (ttype === "email") {
+    q.push(`"${target}"`);
+    q.push(`"${target}" contact`);
+  } else if (ttype === "phone") {
+    const p = normalizePhone(target) || target;
+    q.push(`"${p}"`);
+  } else if (ttype === "domain") {
+    q.push(`site:${target}`);
+    q.push(`"${target}" contact`);
+    q.push(`"${target}" \"privacy policy\"`);
+  } else if (ttype === "ip") {
+    q.push(`"${target}"`);
+    q.push(`"${target}" ASN`);
+  }
+  return q;
+}
+
 export async function runSafeOsintCollection(input: {
   target: string;
   targetType?: string;
@@ -335,6 +375,30 @@ export async function runSafeOsintCollection(input: {
       tags: ["dns", "enrichment"],
       metadata: { confidence: 0.9 },
     });
+
+    // security.txt (public well-known; lightweight)
+    if (!outOfTime()) {
+      await step(`security.txt check: ${target}`);
+      const urls = [
+        `https://${target}/.well-known/security.txt`,
+        `https://${target}/security.txt`,
+        `http://${target}/.well-known/security.txt`,
+        `http://${target}/security.txt`,
+      ];
+      const results = [];
+      for (const u of urls) {
+        if (outOfTime()) break;
+        results.push(await safeFetchMaybeText(u, { timeoutMs: 8000 }));
+      }
+      evidence.push({
+        type: "json",
+        title: `security.txt discovery`,
+        source: "Web",
+        content: JSON.stringify(results, null, 2),
+        tags: ["domain", "securitytxt"],
+        metadata: { confidence: results.some((r: any) => r.ok) ? 0.6 : 0.2 },
+      });
+    }
   }
 
   // Address lookup (OpenStreetMap Nominatim) - public, rate-limited
@@ -425,25 +489,76 @@ export async function runSafeOsintCollection(input: {
 
   // Public web search for name/username/email/phone/domain/ip (safe + verifiable, via API, no scraping)
   if (ttype === "name" || ttype === "username" || ttype === "email" || ttype === "phone" || ttype === "domain" || ttype === "ip") {
-    const queries: string[] = [];
-    if (ttype === "name") {
-      queries.push(`"${target}"`);
-      queries.push(`"${target}" profile`);
-    } else if (ttype === "username") {
-      queries.push(`"${target}"`);
-      queries.push(`"${target}" instagram`);
-      queries.push(`"${target}" facebook`);
-    } else if (ttype === "email") {
-      queries.push(`"${target}"`);
-    } else if (ttype === "phone") {
-      queries.push(`"${normalizePhone(target) || target}"`);
-    } else if (ttype === "domain") {
-      queries.push(`site:${target}`);
-      queries.push(`"${target}" contact`);
-    } else if (ttype === "ip") {
-      queries.push(`"${target}"`);
-    }
+    const queries = buildWebQueriesForTarget(ttype, target);
     await maybeWebSearch(queries, ttype);
+  }
+
+  // Username: GitLab public user lookup
+  if (ttype === "username") {
+    if (!outOfTime()) {
+      await step(`GitLab user lookup: ${target}`);
+      const url = `https://gitlab.com/api/v4/users?username=${encodeURIComponent(target)}`;
+      try {
+        const users = await fetchJson(url, { timeoutMs: 12000 });
+        evidence.push({
+          type: "json",
+          title: `GitLab users: ${target}`,
+          source: "GitLab",
+          content: JSON.stringify(users, null, 2),
+          tags: ["gitlab", "profile"],
+          metadata: { confidence: Array.isArray(users) && users.length ? 0.75 : 0.25 },
+        });
+        if (Array.isArray(users) && users[0]) {
+          const u = users[0];
+          if (u?.web_url) addEntity("url", String(u.web_url), { from: "gitlab" });
+          if (u?.name) addEntity("name", String(u.name), { from: "gitlab" });
+          if (u?.username) addEntity("username", String(u.username), { from: "gitlab" });
+        }
+      } catch (e: any) {
+        evidence.push({
+          type: "text",
+          title: `GitLab lookup failed: ${target}`,
+          source: "GitLab",
+          content: String(e?.message ?? e),
+          tags: ["gitlab", "error"],
+          metadata: { confidence: 0.15 },
+        });
+      }
+    }
+  }
+
+  // IP: basic geolocation / ASN (public API, low impact)
+  if (ttype === "ip") {
+    if (!outOfTime()) {
+      await step(`IP geo/ASN (ip-api.com): ${target}`);
+      const url = `http://ip-api.com/json/${encodeURIComponent(target)}?fields=status,message,country,regionName,city,zip,lat,lon,timezone,isp,org,as,reverse,proxy,hosting`;
+      try {
+        const info = await fetchJson(url, { timeoutMs: 12000, headers: { accept: "application/json" } });
+        evidence.push({
+          type: "json",
+          title: `IP geo/ASN: ${target}`,
+          source: "ip-api.com",
+          content: JSON.stringify(info, null, 2),
+          tags: ["ip", "geo", "asn"],
+          metadata: { confidence: info?.status === "success" ? 0.75 : 0.2 },
+        });
+        if (info?.as) addEntity("asn", String(info.as), { from: "ip-api.com" });
+        if (info?.org) addEntity("org", String(info.org), { from: "ip-api.com" });
+        if (info?.isp) addEntity("org", String(info.isp), { from: "ip-api.com", kind: "isp" });
+        if (info?.reverse) addEntity("domain", String(info.reverse), { from: "ip-api.com", kind: "reverse" });
+        if (typeof info?.proxy === "boolean") riskDelta += info.proxy ? 3 : 0;
+        if (typeof info?.hosting === "boolean") riskDelta += info.hosting ? 2 : 0;
+      } catch (e: any) {
+        evidence.push({
+          type: "text",
+          title: `IP geo/ASN lookup failed: ${target}`,
+          source: "ip-api.com",
+          content: String(e?.message ?? e),
+          tags: ["ip", "error"],
+          metadata: { confidence: 0.1 },
+        });
+      }
+    }
   }
 
   // Follow leads: enrich a few discovered domains/usernames without triggering more web-search recursion.

@@ -110,6 +110,33 @@ export function buildIntelligenceBoardMarkdown(args: {
 
   const webSearchSkipped = evidence.find((e) => e.source === "Web Search" && e.title.startsWith("Web search skipped (no provider configured):"));
 
+  // Lightweight “security analyst” pivots from indicators/entities
+  const pivots: string[] = [];
+  const addPivot = (s: string) => {
+    const v = s.trim();
+    if (!v) return;
+    if (!pivots.includes(v)) pivots.push(v);
+  };
+  const entityVals = (type: string) => entities.filter((e) => (e as any).entityType === type).map((e) => String((e as any).value ?? "").trim()).filter(Boolean);
+  const usernames = Array.from(new Set(entityVals("username"))).slice(0, 8);
+  const domains = Array.from(new Set(entityVals("domain"))).slice(0, 8);
+  const emails = Array.from(new Set(entityVals("email"))).slice(0, 5);
+  const phones = Array.from(new Set(entityVals("phone"))).slice(0, 5);
+  const names = Array.from(new Set(entityVals("name").concat(entityVals("person")))).slice(0, 5);
+
+  for (const u of usernames) {
+    addPivot(`Search: site:instagram.com "${u}"`);
+    addPivot(`Search: site:facebook.com "${u}"`);
+    addPivot(`Search: site:github.com "${u}" OR site:gitlab.com "${u}"`);
+  }
+  for (const d of domains) {
+    addPivot(`Search: site:${d} contact OR privacy OR terms`);
+    addPivot(`Check: https://${d}/.well-known/security.txt`);
+  }
+  for (const e of emails) addPivot(`Search: "${e}"`);
+  for (const p of phones) addPivot(`Search: "${p}"`);
+  for (const n of names) addPivot(`Search: "${n}" profile OR linkedin`);
+
   const lines: string[] = [];
   lines.push(`**Intelligence Board**`);
   lines.push(`- **Case**: ${investigation.title}`);
@@ -159,6 +186,13 @@ export function buildIntelligenceBoardMarkdown(args: {
     }
     for (const [t, vals] of Array.from(byType.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
       lines.push(`- **${t}**: ${topN(Array.from(new Set(vals)), 8).join(", ")}`);
+    }
+  }
+
+  if (pivots.length) {
+    lines.push(`\n**Actionable pivots (next best moves)**`);
+    for (const p of pivots.slice(0, 10)) {
+      lines.push(`- ${p}`);
     }
   }
 
