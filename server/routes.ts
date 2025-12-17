@@ -8,6 +8,7 @@ import { kimiClient } from "./lib/kimi";
 import { runSafeOsintCollection } from "./lib/osint";
 import { buildCaseFileV1 } from "./lib/caseExport";
 import { buildIntelligenceBoardMarkdown, localAnswerFromEvidence } from "./lib/board";
+import { webSearch } from "./lib/webSearch";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -34,6 +35,27 @@ export async function registerRoutes(
         webSearchConfigured,
       },
     });
+  });
+
+  // Web search self-test (does NOT reveal secrets)
+  app.get("/api/diagnostics/web-search", async (_req, res) => {
+    const provider = String(process.env.OSINT_SEARCH_PROVIDER || "").trim().toLowerCase();
+    try {
+      const r = await webSearch("osint", { limit: 1, timeoutMs: 8000 });
+      const ok = Array.isArray(r.results) && r.results.length > 0;
+      res.json({
+        ok,
+        provider: provider || null,
+        resultsCount: r.results?.length ?? 0,
+        sample: ok ? r.results[0] : null,
+      });
+    } catch (e: any) {
+      res.json({
+        ok: false,
+        provider: provider || null,
+        error: String(e?.message ?? e),
+      });
+    }
   });
 
   // Audit log (portable)

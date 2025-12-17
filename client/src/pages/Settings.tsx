@@ -13,6 +13,14 @@ type Health = {
   };
 };
 
+type WebSearchDiag = {
+  ok: boolean;
+  provider: string | null;
+  resultsCount?: number;
+  sample?: { title: string; url: string; snippet?: string } | null;
+  error?: string;
+};
+
 export default function Settings() {
   const { data: health } = useQuery({
     queryKey: ['health'],
@@ -27,6 +35,17 @@ export default function Settings() {
   const kimiOk = Boolean(health?.config?.kimiConfigured);
   const provider = health?.config?.webSearchProvider ?? null;
   const webOk = Boolean(health?.config?.webSearchConfigured);
+
+  const { data: webDiag } = useQuery({
+    queryKey: ['web-search-diagnostics'],
+    queryFn: async (): Promise<WebSearchDiag> => {
+      const res = await fetch('/api/diagnostics/web-search');
+      if (!res.ok) throw new Error('Failed to load web search diagnostics');
+      return res.json();
+    },
+    staleTime: 10_000,
+    enabled: Boolean(provider),
+  });
 
   return (
     <div className="max-w-4xl mx-auto py-8 space-y-6">
@@ -57,6 +76,20 @@ export default function Settings() {
               {webOk ? "CONFIGURED" : "MISSING"}
             </Badge>
           </div>
+          <div className="flex items-center justify-between">
+            <span className="text-muted-foreground">Web search live test</span>
+            <Badge
+              variant={webDiag?.ok ? "secondary" : webDiag ? "destructive" : "secondary"}
+              className="font-mono"
+            >
+              {webDiag?.ok ? "OK" : webDiag ? "FAIL" : "CHECKING"}
+            </Badge>
+          </div>
+          {webDiag && !webDiag.ok && webDiag.error && (
+            <p className="text-xs text-muted-foreground">
+              Web search error: <span className="font-mono">{webDiag.error}</span>
+            </p>
+          )}
           <p className="text-xs text-muted-foreground">
             If anything shows <span className="font-mono">MISSING</span>, open <span className="font-mono">.env</span> in the project folder, paste keys, then restart <span className="font-mono">npm run dev</span>.
           </p>
