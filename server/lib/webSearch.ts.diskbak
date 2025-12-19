@@ -1,10 +1,10 @@
-﻿export type WebSearchResult = {
+export type WebSearchResult = {
   title: string;
   url: string;
   snippet?: string;
 };
 
-export type WebSearchProvider = "brave" | "routeway" | "duckduckgo";
+export type WebSearchProvider = "brave" | "routeway";
 
 export async function webSearch(query: string, opts?: { limit?: number; timeoutMs?: number }): Promise<{
   provider: WebSearchProvider;
@@ -21,22 +21,9 @@ export async function webSearch(query: string, opts?: { limit?: number; timeoutM
       return braveWebSearch(query, opts);
     case "routeway":
       return routewayWebSearch(query, opts);
-    case "duckduckgo":
-      return duckDuckGoWebSearch(query, opts);
     default:
       return { provider: "brave", query, results: [] };
   }
-}
-
-function explainFetchError(e: any) {
-  const msg = String(e?.message ?? e ?? "fetch failed");
-  // Node/undici often stores the root cause in `cause`
-  const causeMsg = e?.cause ? String(e.cause?.message ?? e.cause) : "";
-  const code = String(e?.code ?? e?.cause?.code ?? "").trim();
-  const parts = [msg];
-  if (code) parts.push(`code=${code}`);
-  if (causeMsg && !causeMsg.includes(msg)) parts.push(`cause=${causeMsg}`);
-  return parts.join(" | ");
 }
 
 async function braveWebSearch(query: string, opts?: { limit?: number; timeoutMs?: number }) {
@@ -72,8 +59,6 @@ async function braveWebSearch(query: string, opts?: { limit?: number; timeoutMs?
       .filter((r: WebSearchResult) => r.title && r.url);
 
     return { provider: "brave" as const, query, results };
-  } catch (e: any) {
-    throw new Error(`Brave Search error: ${explainFetchError(e)}`);
   } finally {
     clearTimeout(t);
   }
@@ -147,73 +132,9 @@ async function routewayWebSearch(query: string, opts?: { limit?: number; timeout
     const json = text ? (JSON.parse(text) as any) : null;
     const results = normalizeResults(json);
     return { provider: "routeway" as const, query, results };
-  } catch (e: any) {
-    throw new Error(`Routeway Search error: ${explainFetchError(e)}`);
   } finally {
     clearTimeout(t);
   }
 }
 
-async function duckDuckGoWebSearch(query: string, opts?: { limit?: number; timeoutMs?: number }) {
-  const limit = Math.max(1, Math.min(20, opts?.limit ?? 8));
-  const timeoutMs = Math.max(3000, Math.min(30000, opts?.timeoutMs ?? 12000));
 
-  const controller = new AbortController();
-  const t = setTimeout(() => controller.abort(), timeoutMs);
-  try {
-    // DuckDuckGo Instant Answer API (no key). Note: it returns limited â€œtopicâ€ style results, not a full SERP.
-    const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_redirect=1&no_html=1&skip_disambig=1`;
-    const res = await fetch(url, {
-      headers: {
-        accept: "application/json",
-        "user-agent": "Dpt-of-Karma-OSINT/1.0 (+local)",
-      },
-      signal: controller.signal,
-    });
-    const text = await res.text();
-    if (!res.ok) throw new Error(`DuckDuckGo HTTP ${res.status}: ${text.slice(0, 500)}`);
-    const json = text ? (JSON.parse(text) as any) : null;
-
-    const out: WebSearchResult[] = [];
-    const push = (title: string, url: string, snippet?: string) => {
-      const t = String(title ?? "").trim();
-      const u = String(url ?? "").trim();
-      const s = String(snippet ?? "").trim();
-      if (!t || !u) return;
-      out.push({ title: t, url: u, snippet: s || undefined });
-    };
-
-    // Primary abstract URL
-    if (json?.AbstractURL && json?.Heading) {
-      push(json.Heading, json.AbstractURL, json.AbstractText || "");
-    }
-
-    // Direct results array
-    const direct = Array.isArray(json?.Results) ? json.Results : [];
-    for (const r of direct) {
-      if (out.length >= limit) break;
-      push(r?.Text ?? r?.Result ?? "Result", r?.FirstURL ?? "", r?.Text ?? "");
-    }
-
-    // RelatedTopics can be nested
-    const walkTopics = (arr: any[]) => {
-      for (const it of arr) {
-        if (out.length >= limit) break;
-        if (Array.isArray(it?.Topics)) {
-          walkTopics(it.Topics);
-          continue;
-        }
-        const text = String(it?.Text ?? "").trim();
-        const firstUrl = String(it?.FirstURL ?? "").trim();
-        if (text && firstUrl) push(text, firstUrl, text);
-      }
-    };
-    if (Array.isArray(json?.RelatedTopics)) walkTopics(json.RelatedTopics);
-
-    return { provider: "duckduckgo" as const, query, results: out.slice(0, limit) };
-  } catch (e: any) {
-    throw new Error(`DuckDuckGo error: ${explainFetchError(e)}`);
-  } finally {
-    clearTimeout(t);
-  }
-}
